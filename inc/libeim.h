@@ -153,7 +153,7 @@ namespace eim
 	 * 
 	 * \param x the positions along the slab refractive index profile
 	 * \param A the field amplitude of the slab along the transverse dimension
-	 * \param Bl the field amplitude of the slab along the longitudinal dimension
+	 * \param Bl the field amplitude of the slab along the lateral dimension
 	 * \param Bn the field amplitude of the slab along the normal dimension
 	 * \param neff the effective refractive index for the slab
 	 * \param n1 box refractive index
@@ -229,7 +229,7 @@ namespace eim
 					(-gamma1 * A[i]) / (j * 2.*pi*c/lambda *mu0) :
 					(gamma1 * A[i] ) / (j * 2.*pi*c/lambda * eps0 * pow(n1, 2)));
 			}
-			else if (x[i] >= 0 && x[i] < W)
+			else if (x[i] >= 0 && x[i] <= W)
 			{
 				A[i] = C2 * cos(gamma2 * x[i] + alpha);
 
@@ -280,7 +280,6 @@ namespace eim
 		#else
 		{
 			//standard serial execution of the calculation
-
 			for(size_t i = 0; i < xs; i++)
 			{
 				calculate_field(i);

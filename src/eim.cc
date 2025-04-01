@@ -235,7 +235,6 @@ int main(int argc, char* argv[])
 					char* end = NULL;
 					const char* str = optarg;
 					
-					printf("%s\n",str);
 					wg.n_box = strtod(str, &end);
 					if (str == end) 
 					{

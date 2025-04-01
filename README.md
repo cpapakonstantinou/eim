@@ -6,6 +6,36 @@ The **Effective Index Method** provides a framework for the analysis of two-dime
 ## Licensing
  eim is released under the MIT license. This library is distributed WITHOUT ANY WARRANTY. For details, see the file named 'LICENSE', and license statements in the source files.
 
+## Usage Examples
+
+1. Specify refractive indices of the three layer slab, the mode orders and widths to solve.
+```bash
+
+./eim -n 1.44,3.47,1.44  -j 0,1 -w 0.1,0.2,0.3,0.4,0.5
+
+width,mode,neff
+0.1,TE0,1.47821
+0.1,TE1,1.44
+0.2,TE0,1.65145
+0.2,TE1,1.44
+0.3,TE0,2.01259
+0.3,TE1,1.44
+0.4,TE0,2.31116
+0.4,TE1,1.46452
+0.5,TE0,2.48433
+0.5,TE1,1.58088
+```
+If the mode is unsupported the refractive index will be the min of the box and cladding layers.
+
+2. Calculate the TEO 2D field amplitude in the transverse plane and plot it. 
+```bash
+
+./eim -n 1.44,3.47,1.44 -m TE -j 0 -w 0.5 -O 
+
+make plot_mode TARGET_MODE_MODE=TE0 TARGET_MODE_WIDTH=0.5
+
+```
+
 ## Effective Index Method Concept
 Consider the scalar wave equation:
 

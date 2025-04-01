@@ -6,6 +6,8 @@ TARGET_MODE_LOG=mode2D.csv
 TARGET_MODE_IMG=mode2D.png
 TARGET_MODE_MODE=TE0
 TARGET_MODE_WIDTH=0.5
+TARGET_MODE_TRIB=0.22
+TARGET_MODE_TSLAB=0
 SRC = eim.cc
 
 #Unit test options
@@ -28,11 +30,16 @@ LD = $(CXX)
 
 #Compile Options
 DPAR=0
-CXXFLAGS = -g -std=c++23 -O0 -DPAR=$(DPAR) -march=native -I$(INCDIR) -I /usr/include/eigen3 -I /usr/include/carray
+CXXFLAGS = -g -std=c++23 -O0 -DPAR=$(DPAR) -march=native -I$(INCDIR) -I /usr/include/carray
 LDFLAGS = 
-LDLIBS =-ltbb
+LDLIBS =
 TEST_LDFLAGS = 
-TEST_LDLIBS = -ltbb
+TEST_LDLIBS =
+
+ifeq ($(DPAR), 1)
+    LDLIBS += -ltbb
+    TEST_LDLIBS += -ltbb
+endif
 
 #Shell type
 SHELL := /bin/bash
@@ -64,6 +71,9 @@ plot_mode:
 	$(call add_section,ofile,$(TARGET_MODE_IMG),plt/mode.gp)
 	$(call add_section,mode,$(TARGET_MODE_MODE),plt/mode.gp)
 	$(call add_section,width,$(TARGET_MODE_WIDTH),plt/mode.gp)
+	$(call add_section,t_rib,$(TARGET_MODE_TRIB),plt/mode.gp)
+	$(call add_section,t_slab,$(TARGET_MODE_TSLAB),plt/mode.gp)
+
 	gnuplot --persist plt/mode.gp
 
 plot_eim:

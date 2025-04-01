@@ -28,10 +28,11 @@ set autoscale yfixmax
 set border 1+2 back
 # Set grid and style
 set grid
+set key outside
 # Plot the data
-plot file_TE0 using 1:3 with linespoints title 'TE0' pt 5 lc rgb "red", \
-	 file_TE1 using 1:3 with linespoints title 'TE1' pt 5 lc rgb "black", \
-	 file_TE2 using 1:3 with linespoints title 'TE2' pt 5 lc rgb "pink"
+plot file_TE0 using 3:5 with linespoints title 'TE0' pt 5 lc rgb "red", \
+	 file_TE1 using 3:5 with linespoints title 'TE1' pt 5 lc rgb "black", \
+	 file_TE2 using 3:5 with linespoints title 'TE2' pt 5 lc rgb "pink"
 
 # Clean up temporary files
 system('rm ' . file_TE0)

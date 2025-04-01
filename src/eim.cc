@@ -321,7 +321,7 @@ int main(int argc, char* argv[])
 
 	try //running the program
 	{
-		printf("width,mode,neff\n");
+		printf("t_slab,t_rib,width,mode,neff\n");
 		if( !widths.empty() )
 		{
 			for (const auto& w : widths)
@@ -332,20 +332,21 @@ int main(int argc, char* argv[])
 					for(const auto& j : mode_orders)
 					{
 						wg.mode_order = j;
-						printf("%.3g,%s%lu,%g\n",wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
+						printf("%.3g,%.3g,%.3g,%s%lu,%g\n",wg.t_slab, wg.t_rib, wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
 					}
 				}
-				else printf("%.3g,%s%lu,%g\n",w, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
+				else printf("%.3g,%.3g,%.3g,%s%lu,%g\n",wg.t_slab, wg.t_rib, wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
 			}
 		}
-		else printf("%.3g,%s%lu,%g\n",wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
+		else printf("%.3g,%.3g,%.3g,%s%lu,%g\n",wg.t_slab, wg.t_rib, wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
 
 		if(!mode_logname)
 			mode_logname = "mode2D.csv";
+
 		if (mode_log)
 		{
 			Log mode2D( mode_logname, ",");
-			mode2D << "width" << "mode" << "transverse" << "longitudinal" << "amplitude";
+			mode2D << "t_slab" << "t_rib" << "width" << "mode" << "transverse" << "lateral" << "amplitude";
 			++mode2D;
 
 			cvector<double> x (pts);
@@ -362,7 +363,9 @@ int main(int argc, char* argv[])
 				{
 					for (size_t j = 0; j < pts; ++j)
 					{
-						mode2D << wg.w_rib 
+						mode2D << wg.t_slab
+						<< wg.t_rib 
+						<< wg.w_rib 
 						<< ( (wg.mode == TE ? "TE" : "TM") + to_string(wg.mode_order) )
 						<< x[i] << x[j] 
 						<< abs( field[i][j] );

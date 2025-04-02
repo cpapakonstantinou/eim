@@ -44,11 +44,10 @@ make plot_eim
 make plot_mode TARGET_MODE_MODE=TE0 TARGET_MODE_WIDTH=0.5
 ```
 
-3. Direct the 
 ## Effective Index Method Concept
 Consider the scalar wave equation:
 
-$$ \frac{\partial^2 \phi(x, y)}{\partial x^2} + \frac{\partial^2 \phi(x, y)}{\partial y^2} + k_0^2 \left(n_e(x, y) - n_{eff}^2 \right) \phi(x, y) = 0 $$
+$$ \frac{\partial^2 \phi(x, y)}{\partial x^2} + \frac{\partial^2 \phi(x, y)}{\partial y^2} + k_0^2 \left(n_{e}^{2}(x, y) - n_{eff}^2 \right) \phi(x, y) = 0 $$
 
 where n<sub>eff</sub> is the effective index to be determined.
 
@@ -59,14 +58,14 @@ $$ \phi(x, y) = f(x) \cdot g(y) $$
 
 Substituting this into the wave equation and dividing by phi(x, y), one obtains:
 
-$$ \frac{1}{f(x)} \frac{d^2 f(x)}{dx^2} + \frac{1}{g(y)} \frac{d^2 g(y)}{dy^2} + k_0^2 \left[n_e(x, y) - n_{\text{eff}}^2 \right] = 0. $$
+$$ \frac{1}{f(x)} \frac{d^2 f(x)}{dx^2} + \frac{1}{g(y)} \frac{d^2 g(y)}{dy^2} + k_0^2 \left[n_{e}^{2}(x, y) - n_{\text{eff}}^2 \right] = 0. $$
 
 ### Independent Equations
 By separating variables, derive two independent equations:
 
-$$ \frac{1}{g(y)} \frac{d^2 g(y)}{dy^2} + k_0^2[n_e(x, y) - N^2(x)] g(y) = 0 $$
+$$ \frac{d^2 g(y)}{dy^2} + k_0^2[n_{e}^{2}(x, y) - N^2(x)] g(y) = 0 $$
 
-$$ \frac{1}{f(x)} \frac{d^2 f(x)}{dx^2} - k_0^2 n_{\text{eff}}^2 = -k_0^2 N^2(x). $$
+$$ \frac{d^2 f(x)}{dx^2} - k_0^2 \left( N^2(x) - n_{eff}^{2} \right) f(x) = 0 $$
 
 ### Calculation Procedure
 The effective index calculation follows these steps:
@@ -100,8 +99,7 @@ else //(mode == TM)
 
 
 ### 1D TE Mode Equation Derivation
-The **Transverse Electric (TE) mode** only has a transverse component for a slab waveguide. For proof, expand **Maxwell’s equations** in the absence of free charges or currents:
-
+The Transverse Electric (TE) mode is purely transverse for a slab waveguide. To begin the proof, expand Maxwell’s equations in the absence of free charges or currents. This will later be related to the TE mode condition.
 
 $$
 \nabla \times \mathbf{E} = -j\omega\mu_0 \mathbf{H}
@@ -144,8 +142,7 @@ $$
 
 ### TE Mode Condition
 
-For the **TE mode**, the **electric field is purely transverse**, meaning:
-
+The TE mode condition is that the normal component of the electic field does not exist. Meaning that the field is purely transverse.
 
 $$
 E_z = 0
@@ -165,7 +162,7 @@ $$
 \frac{\partial H_y}{\partial x} - \frac{\partial H_x}{\partial y} = 0.
 $$
 
-Thus, the magnetic field **\( H \)** can have a normal component (\( H_z \)), but the **electric field remains purely in the transverse (x-y) plane**.
+Thus, the magnetic field, H, can have a normal component, Hz, but the electric field remains purely in the transverse plane.
  
 ### Derivation of the Characteristic Equation
 
@@ -191,7 +188,7 @@ Applying boundary conditions at the interfaces, we equate the tangential field c
 
 1. Continuity of Electric Field:
 
-$$ E_x \quad at \quad x = 0 \quad and \quad x = W $$
+$$ E_y \quad at \quad x = 0 \quad and \quad x = W $$
 
 3. Continuity of Magnetic Field:
 

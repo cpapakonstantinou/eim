@@ -1,8 +1,8 @@
-#ifndef __LIB_EIM_H__
-#define __LIB_EIM_H__
+#ifndef __STRIP_H__
+#define __STRIP_H__
 /**
- * \brief Effective Index Method Library.
- * \file libeim.h Effective Index Method Algorithms and Utilities Definitions
+ * \brief Strip waveguide utilities.
+ * \file strip.h Strip Waveguide Mode Equations
  * \author c. papakonstantinou
  */
 // Copyright (c) 2025  Constantine Papakonstantinou
@@ -25,40 +25,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include <cmath>
+#include <eim.h>
 #include <libvec.h>
-#include <async.h>
 #include <libopt.h>
-#include <complex>
-
-//control parallel calculation of loops
-// PAR == 1 uses std::execution
-// PAR == 2 uses async.h
-// PAR == 0 is sequential
-#ifndef PAR
-	#define PAR 0
-#endif //PAR
-
-#if PAR == 1
-	#include <execution>
-#endif
 
 namespace eim
 {
-	static constexpr double pi = M_PI;	
-	static constexpr double eps0 = 8.854188E-12; // Farads per meter (F/m)
-	static constexpr double mu0 = 4 * pi * 1E-7; // Henries per meter (H/m)
-	static constexpr double c = 1/sqrt(eps0*mu0); // free space speed of light
-	static constexpr double eta0 = sqrt(mu0/eps0); // free space impedance
-
-	using field_t = std::complex<double>;
-
-	enum Mode:uint8_t
-	{
-		TE,
-		TM
-	};
-
 	/**
 	 * \brief Characteristic equation of the 3 layer slab.
 	 * This function may be minimized against the input neff using an optimization algorithm.
@@ -115,31 +87,13 @@ namespace eim
 			return slab_equation<TM>(n1, n2, n3, lambda, W, j, neff);  
 		};
 
-		#if PAR > 0
-			auto te_mode = call_async([&slab_TE, &n1, &n2, &n3]() {
-				opt::Status s;
-				auto nmin = std::min(n1, n3);
-				auto n = opt::bisection(slab_TE, nmin, n2, s);
-				return ( (s.status == opt::CONVERGED) ? n : nmin );
+		opt::Status s_TE, s_TM;
+		auto nmin = std::min(n1, n3);
+		auto n_TE = opt::bisection(slab_TE, nmin, n2, s_TE);
+		auto n_TM = opt::bisection(slab_TM, nmin, n2, s_TM);
 
-			});
-			
-			auto tm_mode = call_async([&slab_TM, &n1, &n2, &n3]() {
-				opt::Status s;
-				auto nmin = std::min(n1, n3);
-				auto n = opt::bisection(slab_TM, nmin, n2, s);
-				return ( (s.status == opt::CONVERGED) ? n : nmin );
-			});
-			return std::make_tuple(te_mode.get(), tm_mode.get());
-		#else
-			opt::Status s_TE, s_TM;
-			auto nmin = std::min(n1, n3);
-			auto n_TE = opt::bisection(slab_TE, nmin, n2, s_TE);	
-			auto n_TM = opt::bisection(slab_TM, nmin, n2, s_TM);
-
-			return std::make_tuple(( (s_TE.status == opt::CONVERGED) ? n_TE : nmin ), 
-			( (s_TM.status == opt::CONVERGED) ? n_TM : nmin ));
-		#endif
+		return std::make_tuple(( (s_TE.status == opt::CONVERGED) ? n_TE : nmin ), 
+		( (s_TM.status == opt::CONVERGED) ? n_TM : nmin ));
 	}
 
 	/**
@@ -255,8 +209,7 @@ namespace eim
 			}
 		};
 
-		#if PAR == 1
-		{
+		#if PARALLEL
 			// C++ supports parallel execution policies but under the hood it depends on libtbb 
 			std::for_each(std::execution::par, x1, x2, [&](const double& xi) 
 			{
@@ -264,29 +217,126 @@ namespace eim
 				//xi must be passed by reference
 				size_t i = &xi - &x[0];
 				calculate_field(i);
-			});
-		}
-		#elif PAR == 2
-		{
-			// home-brewed version of the parallel execution policy with no external dependency
-			async_for_each(x1, x2, [&](const double& xi) 
-			{
-				//Requires that the storage container is contiguous
-				//xi must be passed by reference
-				size_t i = &xi - &x[0];
-				calculate_field(i);
-			});
-		}
+			});	
 		#else
 		{
-			//standard serial execution of the calculation
-			for(size_t i = 0; i < xs; i++)
-			{
-				calculate_field(i);
-			}
+		       //standard serial execution of the calculation
+		       for(size_t i = 0; i < xs; i++)
+		       {
+		               calculate_field(i);
+		       }
 		}
 		#endif
+
 	}
 
+	/**
+	 * \brief functor for strip waveguide geometry.
+	 * The 2D waveguide geometry is specified by construction of the structure
+	 * The () operator is overloaded to solve the waveguide by the effective index method
+	 * \note the w_slab parameter is not used for the effective index method
+	 * 
+	 * y
+	 * ↑
+	 * → x
+	 *                <w_slab> <w_rib>  <w_slab>
+	 *                -------- -------- --------
+	 *               | n_clad | n_clad |  ...   |    
+	 *                -------- -------- --------
+	 * t_slab, t_rib | n_core | n_core |  ...   | 
+	 *                -------- -------- --------
+	 *               | n_box  | n_box  |  ...   |
+	 * 		  
+	 **/
+	struct Strip
+	{
+		double wavelength; ///< wavelength
+		double t_rib; ///< thickness of the rib layer
+		double t_slab; ///< thickness of the slab layer
+		double w_rib; ///< width of the rib layer 
+		double w_slab; ///< width of the slab layer
+		double n_box; ///< refractive index of buried oxide layer
+		double n_core; ///< refractive index of core
+		double n_clad; ///< refractive index of cladding
+		size_t mode_order; ///< index of the mode
+		Mode mode; ///< TE or TM mode
+
+		/**
+		 * \brief calculate the effective refractive index
+		 * \returns the effective refractive index 
+		 **/
+		double 
+		operator()()
+		{
+			
+			auto n1 = solve_slab(n_box, (t_slab ? n_core : n_clad), n_clad, wavelength, t_slab, 0);
+			auto n2 = solve_slab(n_box, n_core, n_clad, wavelength, t_rib, 0);
+			const auto& n3 = n1;
+
+			// The TE mode of the waveguide is the TM mode of the analysis
+			// For TM mode analysis, it is the opposite order
+			if (mode ==  TE)
+			{
+				auto neff = solve_slab(get<0>(n1), get<0>(n2), get<0>(n3), wavelength, w_rib, mode_order);
+				return get<1>(neff);
+			}
+			else //(mode == TM)
+			{
+				auto neff = solve_slab(get<1>(n1), get<1>(n2), get<1>(n3), wavelength, w_rib, mode_order);
+				return get<0>(neff);
+			}
+		}
+		/**
+		 * \brief calculate the mode field amplitude
+		 * \param x the span of points in x and y to calculate the field amplitude for
+		 * \param A the field amplitude
+		 **/
+		void 
+		mode_2D(cvector<double>& x, cmatrix<field_t>& field)
+		{
+			size_t N = std::distance(x.begin(), x.end());
+			//Vertical field amplitude
+			cvector<field_t> E_slab ( N );
+			cvector<field_t> H_slab ( N );
+			cvector<field_t> _ ( N );
+
+			cvector<field_t> E_wg( N );
+			cvector<field_t> H_wg( N );
+			
+			if (mode == TE)
+			{	
+				auto n1 = solve_slab(n_box, (t_slab ? n_core : n_clad) , n_clad, wavelength, t_slab, mode_order); 
+				auto n2 = solve_slab(n_box, n_core , n_clad, wavelength, t_rib, mode_order);
+				const auto& n3 = n1;
+				mode_1D<TE>(x.begin(), x.end(), E_slab.begin(), H_slab.begin(), _.begin(), get<0>(n2), n_box, n_core, n_clad, wavelength, t_rib, mode_order);
+				auto neff = solve_slab(get<0>(n1), get<0>(n2), get<0>(n3), wavelength, w_rib, mode_order);
+				mode_1D<TM>(x.begin(), x.end(), H_wg.begin(), E_wg.begin(), _.begin(),  get<1>(neff), get<0>(n1), get<0>(n2), get<0>(n3), wavelength, w_rib, mode_order);
+				
+				#if PARALLEL
+					vec::async_outer_product<field_t>(H_wg.begin(), H_wg.end(), E_slab.begin(), E_slab.end(), &field[0]);
+				#else
+					vec::outer_product<field_t>(H_wg.begin(), H_wg.end(), E_slab.begin(), E_slab.end(), &field[0]);
+				#endif
+			}
+			else // (mode == TM)
+			{
+				auto n1 = solve_slab(n_box, (t_slab ? n_core : n_clad) , n_clad, wavelength, t_slab, mode_order); 
+				auto n2 = solve_slab(n_box, n_core , n_clad, wavelength, t_rib, mode_order);
+				const auto& n3 = n1;
+				mode_1D<TM>(x.begin(), x.end(), H_slab.begin(), E_slab.begin(), _.begin(), get<1>(n2), n_box, n_core, n_clad, wavelength, t_rib, mode_order);
+				auto neff = solve_slab(get<1>(n1), get<1>(n2), get<1>(n3), wavelength, w_rib, mode_order);
+				mode_1D<TE>(x.begin(), x.end(), E_wg.begin(), H_wg.begin(), _.begin(), get<0>(neff), get<1>(n1), get<1>(n2), get<1>(n3), wavelength, w_rib, mode_order);
+				
+				#if PARALLEL
+					vec::async_outer_product<field_t>(E_wg.begin(), E_wg.end(), H_slab.begin(), H_slab.end(), &field[0]);
+				#else
+					vec::outer_product<field_t>(E_wg.begin(), E_wg.end(), H_slab.begin(), H_slab.end(), &field[0]);
+				#endif
+			}
+
+
+		}
+	};
+
 }
-#endif //__LIB_EIM_H__
+#endif //__STRIP_H__

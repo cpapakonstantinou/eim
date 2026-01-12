@@ -10,6 +10,9 @@ TARGET_MODE_TRIB=0.22
 TARGET_MODE_TSLAB=0
 SRC = eim.cc
 
+PREFIX ?= /usr/bin
+INSTALLDIR ?= $(PREFIX)
+
 #Unit test options
 TEST_TARGET = test_app
 TEST_SRC = slab.cc
@@ -24,19 +27,20 @@ INCDIR = inc
 TESTDIR = test
 
 #Toolchains
-CXX = g++
+CXX = g++-11
 CXX_SUFFIX = cc
 LD = $(CXX)
 
 #Compile Options
-DPAR=0
-CXXFLAGS = -g -std=c++23 -O0 -DPAR=$(DPAR) -march=native -I$(INCDIR) -I /usr/include/carray
+ENABLE_PARALLEL=1
+OPT=-O3
+CXXFLAGS = -std=c++23 $(OPT) -DPARALLEL=$(ENABLE_PARALLEL) -march=native -I$(INCDIR) -I /usr/include/carray
 LDFLAGS = 
 LDLIBS =
 TEST_LDFLAGS = 
-TEST_LDLIBS =
+TEST_LDLIBS = -ltdd
 
-ifeq ($(DPAR), 1)
+ifeq ($(ENABLE_PARALLEL), 1)
     LDLIBS += -ltbb
     TEST_LDLIBS += -ltbb
 endif
@@ -81,12 +85,18 @@ plot_eim:
 	$(call add_section,ofile,$(TARGET_EIM_IMG),plt/eim.gp)
 	gnuplot --persist plt/eim.gp
 
-
 clean:
 	$(RM) $(SRCDIR)/*.o $(TESTDIR)/*.o $(foreach var,$(filter TARGET_%_IMG,$(.VARIABLES)),$($(var))) $(TEST_IMG)
 
 cleanall: clean
 	$(RM) $(TARGET) $(foreach var,$(filter TARGET_%_LOG,$(.VARIABLES)),$($(var))) $(TEST_TARGET) $(TEST_LOG) *.dat
+
+
+install: $(TARGET)
+	install -m 755 $(TARGET) $(INSTALLDIR)
+
+uninstall:
+	$(RM) -r $(INSTALLDIR)/$(TARGET)
 
 .PHONY: all clean help
 

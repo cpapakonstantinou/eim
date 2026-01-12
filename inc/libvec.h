@@ -27,17 +27,7 @@
 
 #include <vector>
 #include <numeric>
-#include <exception>
-#include <async.h>
-
-// PAR == 1 uses std::execution
-#ifndef PAR
-	#define PAR 0
-#endif //PAR
-
-#if PAR == 1
-	#include <execution>
-#endif
+#include <eim.h>
 
 namespace vec
 {
@@ -71,6 +61,7 @@ namespace vec
 	 */
 	using std::inner_product;
 
+	#if PARALLEL
 	 /** \brief A Utility for calculating the dot product of a vector in parallel.  
 	 *	Requires that a and b are contiguous storage.
 	 * 	Optionally specify the type (T) of the vector with async_inner_product<T>(...)
@@ -84,8 +75,7 @@ namespace vec
 	 */
 	template <typename T = double, typename I1, typename I2>
 	void 
-	async_inner_product(I1 a1, I1 a2, I2 b1, I2 b2, T& c,
-			size_t threads = std::thread::hardware_concurrency()) 
+	async_inner_product(I1 a1, I1 a2, I2 b1, I2 b2, T& c) 
 	{
 		// Guard against invalid input sizes
 		if (std::distance(a1, a2) != std::distance(b1, b2)) 
@@ -95,29 +85,17 @@ namespace vec
 		if (a1 == a2) 
 			return T(0);
 
-		#if PAR == 1
-			return std::transform_reduce(
-				std::execution::par,
-				a1, a2, 
-				b1,
-				c,
-				std::plus<>(),
-				std::multiplies<>()
-			);
-		#else
-			std::atomic<T> result{0};
-			async_for_each(
-				a1, a2,
-				[&result, &a1, &b1](const T& val, const size_t& i) 
-				{
-					double partial = val * b1[i];
-					result.fetch_add(partial, std::memory_order_relaxed);
-				},
-				threads
-			);
-		c = result.load(std::memory_order_relaxed);
-		#endif
+		return std::transform_reduce(
+			std::execution::par,
+			a1, a2, 
+			b1,
+			c,
+			std::plus<>(),
+			std::multiplies<>()
+		);
+	
 	}
+	#endif
 
 	 /** \brief A Utility for taking the outer product of vectors.
 	 *
@@ -143,6 +121,7 @@ namespace vec
 				c[i][j] = a[i] * b[j];
 	}
 
+	#if PARALLEL
 	 /** \brief A Utility for calculating the outer product of a vector in parallel  
 	 *
 	 * 	Optionally specify the type (T) of the vector with async_outer_product<T>(...)
@@ -155,34 +134,21 @@ namespace vec
 	 */
 	template <typename T = double, typename I1, typename I2>
 	void 
-	async_outer_product(I1 a1, I1 a2, I2 b1, I2 b2, T** c, 
-		size_t threads = std::thread::hardware_concurrency()) 
+	async_outer_product(I1 a1, I1 a2, I2 b1, I2 b2, T** c) 
 	{
 		size_t rows = std::distance(a1, a2);
 		size_t cols = std::distance(b1, b2);
 		const auto a = &(*a1);
 		const auto b = &(*b1);
 
-		#if PAR == 1
-			 std::for_each(std::execution::par, a1, a2,
-				[&a, &b, &c, &cols](const auto& ai) 
-				{
-					size_t i = &ai - &a[0];
-					for (size_t j = 0; j < cols; ++j)
-						c[i][j] = ai * (*(b + j));
-				});
-		#else
-			async_for_each(
-				a1, a2, 
-				[&a, &b, &c, &cols](const auto& ai) 
-				{
-					size_t i = &ai - &a[0];
-					for (size_t j = 0; j < cols; ++j)
-						c[i][j] = ai * (*(b + j));
-				},
-				threads);
-		#endif
-
+		std::for_each(std::execution::par, a1, a2,
+		[&a, &b, &c, &cols](const auto& ai) 
+		{
+			size_t i = &ai - &a[0];
+			for (size_t j = 0; j < cols; ++j)
+				c[i][j] = ai * (*(b + j));
+		});
 	}
+	#endif
 }
 #endif //__LIB_VEC_H__

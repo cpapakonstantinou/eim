@@ -23,200 +23,77 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include <libeim.h>
 #include <iostream>
-#include <log.h>
 #include <numeric>
-#include <list>
-#include <carray.h>
-
-//control parallel calculation of loops
-// PAR == 1 uses std::execution
-// PAR == 2 uses async.h
-// PAR == 0 is sequential
-#ifndef PAR
-	#define PAR 0
-#endif //PAR
-
-#if PAR == 1
-	#include <execution>
-#endif
+#include <log.h>
+#include <eim.h>
+#include <ctl.h>
+#include <strip.h>
+#include <slot.h>
 
 using namespace std;
 using namespace eim;
 
-
-/**
- * \brief functor for waveguide geometry.
- * The 2D waveguide geometry is specified by construction of the structure
- * The () operator is overloaded to solve the waveguide by the effective index method
- * \note the w_slab parameter is not used for the effective index method
- * 
- * y
- * ↑
- * → x
- *                <w_slab> <w_rib>  <w_slab>
- *                -------- -------- --------
- *               | n_clad | n_clad |  ...   |    
- *                -------- -------- --------
- * t_slab, t_rib | n_core | n_core |  ...   | 
- *                -------- -------- --------
- *               | n_box  | n_box  |  ...   |
- * 		  
- **/
-struct Waveguide
-{
-	double wavelength; ///< wavelength
-	double t_rib; ///< thickness of the rib layer
-	double t_slab; ///< thickness of the slab layer
-	double w_rib; ///< width of the rib layer 
-	double w_slab; ///< width of the slab layer
-	double n_box; ///< refractive index of buried oxide layer
-	double n_core; ///< refractive index of core
-	double n_clad; ///< refractive index of cladding
-	size_t mode_order; ///< index of the mode
-	Mode mode; ///< TE or TM mode
-
-	/**
-	 * \brief calculate the effective refractive index
-	 * \returns the effective refractive index 
-	 **/
-	double 
-	operator()()
-	{
-		
-		auto n1 = solve_slab(n_box, (t_slab ? n_core : n_clad), n_clad, wavelength, t_slab, 0);
-		auto n2 = solve_slab(n_box, n_core, n_clad, wavelength, t_rib, 0);
-		const auto& n3 = n1;
-
-		// The TE mode of the waveguide is the TM mode of the analysis
-		// For TM mode analysis, it is the opposite order
-		if (mode ==  TE)
-		{
-			auto neff = solve_slab(get<0>(n1), get<0>(n2), get<0>(n3), wavelength, w_rib, mode_order);
-			return get<1>(neff);
-		}
-		else //(mode == TM)
-		{
-			auto neff = solve_slab(get<1>(n1), get<1>(n2), get<1>(n3), wavelength, w_rib, mode_order);
-			return get<0>(neff);
-		}
-	}
-	/**
-	 * \brief calculate the mode field amplitude
-	 * \param x the span of points in x and y to calculate the field amplitude for
-	 * \param A the field amplitude
-	 **/
-	void 
-	mode_2D(cvector<double>& x, cmatrix<field_t>& field)
-	{
-		size_t N = std::distance(x.begin(), x.end());
-		//Vertical field amplitude
-		cvector<field_t> E_slab ( N );
-		cvector<field_t> H_slab ( N );
-		cvector<field_t> _ ( N );
-
-		cvector<field_t> E_wg( N );
-		cvector<field_t> H_wg( N );
-		
-		if (mode == TE)
-		{	
-			auto n1 = solve_slab(n_box, (t_slab ? n_core : n_clad) , n_clad, wavelength, t_slab, mode_order); 
-			auto n2 = solve_slab(n_box, n_core , n_clad, wavelength, t_rib, mode_order);
-			const auto& n3 = n1;
-			mode_1D<TE>(x.begin(), x.end(), E_slab.begin(), H_slab.begin(), _.begin(), get<0>(n2), n_box, n_core, n_clad, wavelength, t_rib, mode_order);
-			auto neff = solve_slab(get<0>(n1), get<0>(n2), get<0>(n3), wavelength, w_rib, mode_order);
-			mode_1D<TM>(x.begin(), x.end(), H_wg.begin(), E_wg.begin(), _.begin(),  get<1>(neff), get<0>(n1), get<0>(n2), get<0>(n3), wavelength, w_rib, mode_order);
-			
-			if constexpr (PAR == 0)
-				vec::outer_product<field_t>(H_wg.begin(), H_wg.end(), E_slab.begin(), E_slab.end(), &field[0]);
-			else
-				vec::async_outer_product<field_t>(H_wg.begin(), H_wg.end(), E_slab.begin(), E_slab.end(), &field[0]);
-		}
-		else // (mode == TM)
-		{
-			auto n1 = solve_slab(n_box, (t_slab ? n_core : n_clad) , n_clad, wavelength, t_slab, mode_order); 
-			auto n2 = solve_slab(n_box, n_core , n_clad, wavelength, t_rib, mode_order);
-			const auto& n3 = n1;
-			mode_1D<TM>(x.begin(), x.end(), H_slab.begin(), E_slab.begin(), _.begin(), get<1>(n2), n_box, n_core, n_clad, wavelength, t_rib, mode_order);
-			auto neff = solve_slab(get<1>(n1), get<1>(n2), get<1>(n3), wavelength, w_rib, mode_order);
-			mode_1D<TE>(x.begin(), x.end(), E_wg.begin(), H_wg.begin(), _.begin(), get<0>(neff), get<1>(n1), get<1>(n2), get<1>(n3), wavelength, w_rib, mode_order);
-			
-			if constexpr (PAR == 0)
-				vec::outer_product<field_t>(E_wg.begin(), E_wg.end(), H_slab.begin(), H_slab.end(), &field[0]);
-			else
-				vec::async_outer_product<field_t>(E_wg.begin(), E_wg.end(), H_slab.begin(), H_slab.end(), &field[0]);
-		}
-
-
-	}
-};
-
-const char* usage = "usage eim [opts]\n" 
-					"-e extents of axes in mode\n"
-					"-j mode order 0,1,2,...,N\n"
-					"-l wavelength\n"
-					"-m TE|TM\n"
-					"-n n_box,n_core,n_clad\n"
-					"-N number of points for axis extent in mode\n"
-					"-o name of field amplitude log\n"
-					"-O output log of field amplitude for mode(s)"
-					"-r rib_thickness\n"
-					"-s slab_thickness\n"
-					"-w rib_width\n";
+const char* usage = 
+	"usage: eim [opts]\n"
+	"\nWaveguide Control:\n"
+	"\t-t <type>               Waveguide type: 'strip' or 'slot'\n"
+	"\t-r <thickness>          Rib/core thickness\n"
+	"\t-s <thickness>          Slab thickness\n"
+	"\t-w <width>[,...]        Rib/core width(s)\n"
+	"\t-S <width>              Slot width\n"
+	"\t-n <n_box>,<n_core>,<n_clad>[,<n_slot>] Refractive indices\n"
+	"\t-m <mode>               Mode polarization: 'TE' or 'TM'.\n"
+	"\t-j <order>[,...]        Mode order(s): 0,1,2,...\n"
+	"\t-l <wavelength>[,...]   Wavelength\n"
+	"\nOutput Control:\n"
+	"\t-O                      Enable 2D mode field calculation\n"
+	"\t-o <filename>           Output filename for mode field\n"
+	"\t-e <extent>             Spatial extent for field calculation\n"
+	"\t-p <points>             Number of points per axis\n";
 
 int main(int argc, char* argv[])
 {
-	const char* mode_logname = NULL;
-	bool mode_log = false;
+	std::unique_ptr<ctl> ctx = std::make_unique<ctl>(); //Application Control struct
 
-	Waveguide wg 
-	{
-		.wavelength = 1.55,
-		.t_rib = 0.220,
-		.t_slab = 0,
-		.w_rib = 0.5,
-		.w_slab = 0,
-		.n_box = 1.44,
-		.n_core = 3.47,
-		.n_clad = 1.44,
-		.mode_order = 0,
-		.mode = TE
-	};
-
-	std::list<size_t> mode_orders;
-	std::list<double> widths;
-	size_t pts = 100; 
-	double extent = 1;
-	try //configuring the program
+	try // Parsing command line
 	{
 		int c;
-		while ((c = getopt(argc, argv, "e:j:hl:m:n:o:Op:r:s:w:")) != -1) 
+		while ((c = getopt(argc, argv, "e:j:hl:m:n:o:Op:r:s:S:t:w:")) != -1) 
 		{
 			switch (c) 
 			{
+				case 't':
+				{
+					string device{optarg};
+					if (device == "strip") 
+					{
+						ctx->device = Waveguide::STRIP;
+					} 
+					else if (device == "slot") 
+					{
+						ctx->device = Waveguide::SLOT;
+					} 
+					else 
+					{
+						cerr << "[ERROR] waveguide type: must be 'strip' or 'slot'." << endl;
+						return -1;
+					}
+					break;
+				}
 				case 'e':
 				{
-					extent = stod(optarg);
+					ctx->extent = stod(optarg);
 					break;
 				}
 				case 'j':
 				{
-					char* end;
-					const char* str = optarg;
-					while (*str) 
-					{
-						size_t val = strtoul(str, &end, 10);
-						if (str == end) break;
-						mode_orders.push_back(val);
-						str = (*end) ? end + 1 : end;
-					}
-					
+					parse_numeric<unsigned>(optarg, ctx->mode_orders);
 					break;
 				}
 				case 'l':
 				{
-					wg.wavelength = stod(optarg);
+					parse_numeric<double>(optarg, ctx->wavelengths);
 					break;
 				}
 				case 'm':
@@ -224,10 +101,10 @@ int main(int argc, char* argv[])
 					string str{optarg};
 					if (str != "TE" && str != "TM") 
 					{
-						cerr << "Invalid mode. Use \"TE\" or \"TM\"." << endl;
+						cerr << "[ERROR] mode: must be 'TE' or 'TM'." << endl;
 						return -1;
 					}
-					wg.mode = ((str == "TE") ? TE : TM);
+					ctx->mode = ((str == "TE") ? TE : TM);
 					break;
 				}
 				case 'n':
@@ -235,19 +112,20 @@ int main(int argc, char* argv[])
 					char* end = NULL;
 					const char* str = optarg;
 					
-					wg.n_box = strtod(str, &end);
+					// Parse n_box
+					ctx->n_box = strtod(str, &end);
 					if (str == end) 
 					{
-						cerr << "n_box missing" << endl;
+						cerr << "[ERROR] n: n_box missing" << endl;
 						return -1;
 					}
 					str = (*end) ? end + 1 : end;
 
 					// Parse n_core
-					wg.n_core = strtod(str, &end);
+					ctx->n_core = strtod(str, &end);
 					if (str == end) 
 					{
-						cerr << "n_core missing" << endl;
+						cerr << "[ERROR] n: n_core missing" << endl;
 						return -1;
 					}
 					str = (*end) ? end + 1 : end;
@@ -255,54 +133,62 @@ int main(int argc, char* argv[])
 					// Parse n_clad
 					if (*str == '\0') 
 					{
-						cerr << "n_clad missing" << endl;
+						cerr << "[ERROR] n: n_clad missing" << endl;
 						return -1;
 					}
-					wg.n_clad = strtod(str, &end);
+					ctx->n_clad = strtod(str, &end);
 					if (str == end) 
 					{
-						cerr << "n_clad missing or invalid" << endl;
+						cerr << "[ERROR] n: n_clad missing or invalid" << endl;
 						return -1;
 					}
-
+					
+					// Parse n_slot (optional, but required for slot waveguides)
+					str = (*end) ? end + 1 : end;
+					if (*str != '\0') 
+					{
+						ctx->n_slot = strtod(str, &end);
+						if (str == end) 
+						{
+							cerr << "[ERROR] n: n_slot invalid" << endl;
+							return -1;
+						}
+					}
 					break;
 				}
 				case 'o':
 				{
-					mode_logname = optarg;
+					ctx->mode_logname = optarg;
 					break;
 				}
 				case 'O':
 				{
-					mode_log = true;
+					ctx->mode_log = true;
 					break;
 				}
 				case 'p':
 				{
-					pts = stoul(optarg);
+					ctx->pts = stoul(optarg);
 					break;
 				}
 				case 'r':
 				{
-					wg.t_rib = stod(optarg);
+					ctx->t_core = stod(optarg);
 					break;
 				}
 				case 's':
 				{
-					wg.t_slab = stod(optarg);
+					ctx->t_slab = stod(optarg);
+					break;
+				}
+				case 'S':
+				{
+					parse_numeric<double>(optarg, ctx->gaps);
 					break;
 				}
 				case 'w':
 				{
-					char* end = NULL;
-					const char* str = optarg;
-					while (*str) 
-					{
-						double val = strtod(str, &end);
-						if (str == end) break;
-						widths.push_back(val);
-						str = (*end) ? end + 1 : end;
-					}
+					parse_numeric<double>(optarg, ctx->widths);
 					break;
 				}
 				case 'h':
@@ -311,92 +197,221 @@ int main(int argc, char* argv[])
 					return -1;
 			}
 		}
+	}
+	catch(const exception& ex)
+	{
+		cerr << "[ERROR] opts: parsing arguments: " << ex.what() << endl;
+		return -1;
+	}
+
+	try // validation
+	{
+		if (ctx->wavelengths.empty()) 
+		{
+			cerr << "[ERROR] setup: Must specify at least one wavelength" << endl;
+			return -1;
+		}
+
+		if (ctx->widths.empty()) 
+		{
+			cerr << "[ERROR] setup: Must specify at least one width" << endl;
+			return -1;
+		}
+
+		if (ctx->mode_orders.empty()) 
+		{
+			cerr << "[ERROR] setup: Must specify at least one mode order" << endl;
+			return -1;
+		}
+
+		if (!ctx->n_core || !ctx->n_clad || !ctx->n_box) 
+		{
+			cerr << "[ERROR] setup: Must specify refractive index" << endl;
+			return -1;
+		}
+
+		if (!ctx->t_core) 
+		{
+			cerr << "[ERROR] setup: Must specify core thickness" << endl;
+			return -1;
+		}
+
+		if (ctx->device == SLOT && ctx->gaps.empty()) 
+		{
+			cerr << "[ERROR] setup: Must specify at least one slot width" << endl;
+			return -1;
+		}
+
+		if(ctx->device != STRIP && ctx->device != SLOT) 
+		{
+			cerr << "[ERROR] setup: supported devices: 'strip', 'slot'." << endl;
+			return -1;
+		}
+
+		if(ctx->mode_log) 
+		{
+			if(!ctx->pts)
+			{
+				cerr << "[ERROR] setup: Must set number of mode points" << endl;
+				return -1;	
+			}
+			if(!ctx->extent)
+			{
+				cerr << "[ERROR] setup: Must set mode extent" << endl;
+				return -1;	
+			}
+
+		}
 
 	}
 	catch(const exception& ex)
 	{
-		cerr << ex.what() << endl;
+		cerr << "[ERROR] setup: " << ex.what() << endl;
 		return -1;
 	}
 
-	try //running the program
+	try // Running the program
 	{
-		printf("t_slab,t_rib,width,mode,neff\n");
-		if( !widths.empty() )
+		if (ctx->device == Waveguide::STRIP)
 		{
-			for (const auto& w : widths)
-			{
-				wg.w_rib = w;
-				if( !mode_orders.empty() )
-				{
-					for(const auto& j : mode_orders)
-					{
-						wg.mode_order = j;
-						printf("%.3g,%.3g,%.3g,%s%lu,%g\n",wg.t_slab, wg.t_rib, wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
-					}
-				}
-				else printf("%.3g,%.3g,%.3g,%s%lu,%g\n",wg.t_slab, wg.t_rib, wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
-			}
-		}
-		else printf("%.3g,%.3g,%.3g,%s%lu,%g\n",wg.t_slab, wg.t_rib, wg.w_rib, wg.mode == TE ? "TE" : "TM", wg.mode_order, wg());
-
-		if(!mode_logname)
-			mode_logname = "mode2D.csv";
-
-		if (mode_log)
-		{
-			Log mode2D( mode_logname, ",");
-			mode2D << "t_slab" << "t_rib" << "width" << "mode" << "transverse" << "lateral" << "amplitude";
-			++mode2D;
-
-			cvector<double> x (pts);
-
-			vec::linspace(x.begin(), x.end(), -extent, extent);
-
-			cmatrix<field_t> field( pts, pts );
-
-			auto log_mode = [&wg, &pts, &x, &field, &mode2D]()
-			{
-				wg.mode_2D(x, field);
-				//iterate in row major
-				for (size_t i = 0; i < pts; ++i) 
-				{
-					for (size_t j = 0; j < pts; ++j)
-					{
-						mode2D << wg.t_slab
-						<< wg.t_rib 
-						<< wg.w_rib 
-						<< ( (wg.mode == TE ? "TE" : "TM") + to_string(wg.mode_order) )
-						<< x[i] << x[j] 
-						<< abs( field[i][j] );
-						++mode2D;
-					}
-				}
+			Strip wg{
+				.wavelength = ctx->wavelengths[0],
+				.t_rib = ctx->t_core,
+				.t_slab = ctx->t_slab,
+				.w_rib = ctx->widths[0],
+				.w_slab = 0, // Not used in EIM
+				.n_box = ctx->n_box,
+				.n_core = ctx->n_core,
+				.n_clad = ctx->n_clad,
+				.mode_order = ctx->mode_orders[0],
+				.mode = ctx->mode
 			};
 
-			if( !widths.empty() )
+			printf("t_slab,t_rib,width,wavelength,mode,neff\n");
+
+			// Calculate neff for each width and mode order
+			for(const auto& l : ctx->wavelengths)
 			{
-				for (const auto& w : widths)
+				wg.wavelength = l;
+				for (const auto& w : ctx->widths)
 				{
 					wg.w_rib = w;
-					if( !mode_orders.empty() )
+					for (const auto& j : ctx->mode_orders)
 					{
-						for(const auto& j : mode_orders)
+						wg.mode_order = j;
+						printf("%.3g,%.3g,%.3g,%.4g,%s%lu,%.6g\n",
+							wg.t_slab, 
+							wg.t_rib, 
+							wg.w_rib,
+							wg.wavelength, 
+							wg.mode == TE ? "TE" : "TM",
+							wg.mode_order, 
+							wg());
+					}
+				}
+			}
+
+			// Mode field calculation
+			if (ctx->mode_log)
+			{
+				if (!ctx->mode_logname)
+					ctx->mode_logname = "mode2D_strip.csv";
+
+				Log mode2D(ctx->mode_logname, ",");
+				mode2D << "t_slab" << "t_rib" << "width" << "mode" 
+					   << "transverse" << "lateral" << "amplitude";
+				++mode2D;
+
+				cvector<double> x(ctx->pts);
+				vec::linspace(x.begin(), x.end(), -ctx->extent, ctx->extent);
+				cmatrix<field_t> field(ctx->pts, ctx->pts);
+
+				auto log_mode = [&]()
+				{
+					wg.mode_2D(x, field);
+					for (size_t i = 0; i < ctx->pts; ++i) 
+					{
+						for (size_t j = 0; j < ctx->pts; ++j)
+						{
+							mode2D << wg.t_slab << wg.t_rib << wg.w_rib
+								   << ((wg.mode == TE ? "TE" : "TM") + to_string(wg.mode_order))
+								   << x[i] << x[j] << abs(field[i][j]);
+							++mode2D;
+						}
+					}
+				};
+
+				// Calculate fields for all width/mode combinations
+				for(const auto& l : ctx->wavelengths)
+				{
+					wg.wavelength = l;
+					for (const auto& w : ctx->widths)
+					{
+						wg.w_rib = w;
+						for (const auto& j : ctx->mode_orders)
 						{
 							wg.mode_order = j;
 							log_mode();
 						}
 					}
-					else log_mode();
 				}
 			}
-			else log_mode();
+		}
+		else // SLOT waveguide
+		{
+			waveguide wg{
+				.wavelength = ctx->wavelengths[0],
+				.t_core = ctx->t_core,
+				.w_core = ctx->widths[0],
+				.w_slot = ctx->gaps[0],
+				.n_box = ctx->n_box,
+				.n_clad = ctx->n_clad,
+				.n_core = ctx->n_core,
+				.n_slot = ctx->n_slot,
+				.mode_order = ctx->mode_orders[0],
+				.mode = ctx->mode
+			};
+
+			printf("t_core,w_core,w_slot,wavelength,mode,neff\n");
+
+			// Calculate neff for each width, gap and mode order
+			for(const auto& l : ctx->wavelengths)
+			{
+				wg.wavelength = l;
+				for (const auto& g: ctx->gaps)
+				{
+					wg.w_slot = g;
+					for (const auto& w : ctx->widths)
+					{
+						wg.w_core = w;
+						for (const auto& j : ctx->mode_orders)
+						{
+							wg.mode_order = j;
+							printf("%.3g,%.3g,%.3g,%.4g,%s%lu,%.6g\n",
+								wg.t_core, 
+								wg.w_core, 
+								wg.w_slot,
+								wg.wavelength, 
+								wg.mode == TE ? "TE" : "TM",
+								wg.mode_order, 
+								wg());
+						}
+					}
+				}
+			}
+
+			// TODO: 2D mode field calculation not yet implemented for slot
+			if (ctx->mode_log)
+			{
+				cerr << "[WARN]: 2D mode field calculation not implemented for slot waveguides." << endl;
+			}
 		}
 	}
 	catch(const exception& ex)
 	{
-		cerr << ex.what() << endl;
+		cerr << "[ERROR] calculation: " << ex.what() << endl;
 		return -1;
 	}
+
 	return 0;
 }

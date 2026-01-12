@@ -46,7 +46,7 @@ namespace opt
 		uint8_t status; ///< Indicates if run Converged or Diverged
 		uint32_t iterations; ///< Number of iterations used
 		double residual; ///< residual at final run 
-	}__attribute((packed));
+	}__attribute__((packed));
 
 	/**
 	 * \brief Bisection method to find the root of a function.

@@ -1,4 +1,4 @@
-#include <libeim.h>
+#include <strip.h>
 #include <iostream>
 #include <log.h>
 #include <carray.h>
